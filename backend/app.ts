@@ -1,5 +1,6 @@
 import express from "express";
 import { join } from "path";
+import history from "connect-history-api-fallback";
 import logger from "morgan";
 import passport from "passport";
 import session from "express-session";
@@ -117,6 +118,12 @@ app.use("/comments", commentRoutes);
 app.use("/notifications", notificationRoutes);
 app.use("/bankTransfers", bankTransferRoutes);
 
+// SPA fallback: rewrites unmatched GET/HTML requests (client-side routes
+// like /personal, /signin) to index.html, so a direct link or a page
+// refresh doesn't 404 against Express. Must run after every API route
+// above (those are matched first and never reach this) and before
+// express.static (which alone only serves exact file matches).
+app.use(history());
 app.use(express.static(join(__dirname, "../public")));
 
 getBackendPort().then((port) => {

@@ -24,7 +24,6 @@ RUN yarn build
 # --- Runtime stage: just the Express backend + the already-built frontend ---
 FROM node:22-alpine AS runtime
 WORKDIR /app
-ENV NODE_ENV=production
 
 COPY package.json yarn.lock ./
 # Full install (including devDependencies): the backend runs through
@@ -32,7 +31,14 @@ COPY package.json yarn.lock ./
 # so typescript/ts-node are needed at runtime too. Known simplification —
 # a leaner image would compile the backend to plain JS and install
 # --production only; out of scope for this demonstration.
+#
+# NODE_ENV=production is set only *after* this install, deliberately —
+# yarn classic (v1) treats NODE_ENV=production exactly like --production
+# and silently skips devDependencies, which would have removed ts-node/
+# typescript here. Caught by the smoke test job in delivery.yml (it
+# actually boots the image), not by the build succeeding.
 RUN yarn install --frozen-lockfile --ignore-scripts
+ENV NODE_ENV=production
 
 COPY backend ./backend
 COPY src ./src

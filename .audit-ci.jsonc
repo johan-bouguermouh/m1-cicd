@@ -24,7 +24,6 @@
     "GHSA-7p8r-x3mc-p8w7", // fast-uri: host confusion via backslash authority introducer
     "GHSA-8gc5-j5rx-235r", // fast-xml-parser: numeric entity expansion bypassing expansion limits
     "GHSA-c2c7-rcm5-vvqj", // picomatch: ReDoS via extglob quantifiers
-    "GHSA-fjxv-7rqg-78g4", // form-data: unsafe random function for choosing boundary (critical)
     "GHSA-hfxv-24rg-xrqf", // axios: ReDoS via cookie name injection
     "GHSA-hmw2-7cc7-3qxx", // form-data: CRLF injection via unescaped multipart field names/filenames
     "GHSA-j5f8-grm9-p9fc", // axios: Proxy-Authorization header leak on proxy re-evaluation

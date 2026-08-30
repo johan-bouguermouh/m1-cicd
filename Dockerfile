@@ -42,10 +42,20 @@ ENV NODE_ENV=production
 
 COPY backend ./backend
 COPY src ./src
+COPY scripts ./scripts
 COPY tsconfig.json tsconfig.tsnode.json ./
 COPY .env ./
 COPY data/database-seed.json ./data/database.json
 COPY --from=builder /app/build ./public
+
+# backend/helpers.ts unconditionally imports ../src/aws-exports — a
+# generated file, never committed (only produced by
+# `yarn copy:mock:awsexports`, the same step the CI's predev:cognito:ci
+# runs). Without it the process can't even boot, whether or not Cognito
+# is actually used. Caught by the smoke test, same as the NODE_ENV issue
+# above — a successful `docker build` doesn't mean `node` can load the
+# entrypoint.
+RUN yarn copy:mock:awsexports
 
 # Un-instrumented backend runner (no nyc coverage) — same script already
 # used for external hosting (CodeSandbox) in this repo.

@@ -1,0 +1,13 @@
+.git
+node_modules
+build
+public
+cypress
+cypress.config.ts
+docs
+*.md
+.github
+data/database.json
+coverage
+.nyc_output
+.vscode

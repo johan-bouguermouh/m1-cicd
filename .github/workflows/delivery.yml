@@ -49,6 +49,10 @@ jobs:
         with:
           context: .
           push: true
+          # Also load the built image into this runner's local Docker
+          # daemon, so the smoke test below runs the exact image just
+          # pushed instead of pulling it back from the registry.
+          load: true
           tags: |
             ghcr.io/${{ github.repository }}:${{ github.sha }}
             ghcr.io/${{ github.repository }}:latest
@@ -57,3 +61,47 @@ jobs:
           # to Docker layers instead of node_modules.
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # Building without errors doesn't mean the app actually runs — boot
+      # the just-built image for real and hit it over HTTP before calling
+      # this Delivery. Checks two things: the container comes up at all,
+      # and the SPA fallback added alongside the Dockerfile (§ backend/
+      # app.ts) actually serves index.html for a client-side route instead
+      # of 404ing.
+      - name: Smoke test the image
+        run: |
+          set -e
+          docker run -d --name smoke -p 3001:3001 "ghcr.io/${{ github.repository }}:${{ github.sha }}"
+
+          echo "Waiting for the app to respond..."
+          up=false
+          for i in $(seq 1 30); do
+            if curl -sf -o /dev/null http://localhost:3001/; then
+              echo "App is up after ${i} attempt(s)"
+              up=true
+              break
+            fi
+            sleep 2
+          done
+          if [ "$up" != "true" ]; then
+            echo "::error::App never responded on port 3001"
+            docker logs smoke
+            exit 1
+          fi
+
+          index_status=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3001/)
+          echo "GET / -> ${index_status}"
+
+          spa_status=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3001/signin)
+          echo "GET /signin -> ${spa_status}"
+          if [ "$spa_status" != "200" ]; then
+            echo "::error::Expected 200 from the SPA fallback on /signin, got ${spa_status}"
+            docker logs smoke
+            exit 1
+          fi
+
+          docker logs smoke
+
+      - name: Stop smoke test container
+        if: always()
+        run: docker rm -f smoke || true

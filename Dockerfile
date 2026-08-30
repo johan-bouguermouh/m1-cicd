@@ -24,7 +24,6 @@ RUN yarn build
 # --- Runtime stage: just the Express backend + the already-built frontend ---
 FROM node:22-alpine AS runtime
 WORKDIR /app
-ENV NODE_ENV=production
 
 COPY package.json yarn.lock ./
 # Full install (including devDependencies): the backend runs through
@@ -32,18 +31,40 @@ COPY package.json yarn.lock ./
 # so typescript/ts-node are needed at runtime too. Known simplification —
 # a leaner image would compile the backend to plain JS and install
 # --production only; out of scope for this demonstration.
+#
+# NODE_ENV=production is set only *after* this install, deliberately —
+# yarn classic (v1) treats NODE_ENV=production exactly like --production
+# and silently skips devDependencies, which would have removed ts-node/
+# typescript here. Caught by the smoke test job in delivery.yml (it
+# actually boots the image), not by the build succeeding.
 RUN yarn install --frozen-lockfile --ignore-scripts
+ENV NODE_ENV=production
 
 COPY backend ./backend
 COPY src ./src
+COPY scripts ./scripts
 COPY tsconfig.json tsconfig.tsnode.json ./
 COPY .env ./
 COPY data/database-seed.json ./data/database.json
 COPY --from=builder /app/build ./public
 
-# Un-instrumented backend runner (no nyc coverage) — same script already
-# used for external hosting (CodeSandbox) in this repo.
-RUN chown -R node:node /app
+# backend/helpers.ts unconditionally imports ../src/aws-exports — a
+# generated file, never committed (only produced by
+# `yarn copy:mock:awsexports`, the same step the CI's predev:cognito:ci
+# runs). Without it the process can't even boot, whether or not Cognito
+# is actually used. Caught by the smoke test, same as the NODE_ENV issue
+# above — a successful `docker build` doesn't mean `node` can load the
+# entrypoint.
+RUN yarn copy:mock:awsexports
+
+# Only data/ needs to be writable by the runtime user — lowdb is the
+# only thing that writes to disk (database.json), everything else (code,
+# node_modules, the built frontend) is read-only at runtime. chown -R on
+# the whole /app tree was measured at ~4 minutes by itself (recursively
+# rewriting ownership across ~2100 packages' worth of node_modules,
+# including devDependencies like Cypress that are never touched at
+# runtime) — narrowing it to just data/ removes nearly the entire cost.
+RUN chown -R node:node /app/data
 USER node
 
 # VITE_BACKEND_PORT in .env — the single port serving both the API and

@@ -57,9 +57,14 @@ COPY --from=builder /app/build ./public
 # entrypoint.
 RUN yarn copy:mock:awsexports
 
-# Un-instrumented backend runner (no nyc coverage) — same script already
-# used for external hosting (CodeSandbox) in this repo.
-RUN chown -R node:node /app
+# Only data/ needs to be writable by the runtime user — lowdb is the
+# only thing that writes to disk (database.json), everything else (code,
+# node_modules, the built frontend) is read-only at runtime. chown -R on
+# the whole /app tree was measured at ~4 minutes by itself (recursively
+# rewriting ownership across ~2100 packages' worth of node_modules,
+# including devDependencies like Cypress that are never touched at
+# runtime) — narrowing it to just data/ removes nearly the entire cost.
+RUN chown -R node:node /app/data
 USER node
 
 # VITE_BACKEND_PORT in .env — the single port serving both the API and
